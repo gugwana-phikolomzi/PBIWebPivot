@@ -1,2 +1,5 @@
 .vscode/
 node_modules/
+.tmp/
+dist/
+webpack.statistics.prod.html

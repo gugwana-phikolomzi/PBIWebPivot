@@ -1,79 +1,46 @@
 {
-    "dataRoles": [
-        {
-            "displayName": "Category Data",
-            "name": "category",
-            "kind": "Grouping"
+  "privileges": [],
+  "dataRoles": [
+    {
+      "name": "fields",
+      "displayName": "Fields",
+      "kind": "GroupingOrMeasure"
+    }
+  ],
+  "dataViewMappings": [
+    {
+      "table": {
+        "rows": {
+          "for": {
+            "in": "fields"
+          },
+          "dataReductionAlgorithm": {
+            "window": {
+              "count": 30000
+            }
+          }
+        }
+      }
+    }
+  ],
+  "objects": {
+    "headerSettings": {
+      "displayName": "Header",
+      "properties": {
+        "show": {
+          "displayName": "Show header",
+          "type": {
+            "bool": true
+          }
         },
-        {
-            "displayName": "Measure Data",
-            "name": "measure",
-            "kind": "Measure"
+        "titleText": {
+          "displayName": "Header text",
+          "type": {
+            "text": true
+          }
         }
-    ],
-    "objects": {
-        "dataPoint": {
-            "properties": {
-                "defaultColor": {
-                    "type": {
-                        "fill": {
-                            "solid": {
-                                "color": true
-                            }
-                        }
-                    }
-                },
-                "showAllDataPoints": {
-                    "type": {
-                        "bool": true
-                    }
-                },
-                "fill": {
-                    "type": {
-                        "fill": {
-                            "solid": {
-                                "color": true
-                            }
-                        }
-                    }
-                },
-                "fillRule": {
-                    "type": {
-                        "fill": {}
-                    }
-                },
-                 "fontSize": {
-                    "type": {
-                        "formatting": {
-                            "fontSize": true
-                        }
-                    }
-                }
-            }
-        }
-    },
-    "dataViewMappings": [
-        {
-            "categorical": {
-                "categories": {
-                    "for": {
-                        "in": "category"
-                    },
-                    "dataReductionAlgorithm": {
-                        "top": {}
-                    }
-                },
-                "values": {
-                    "select": [
-                        {
-                            "bind": {
-                                "to": "measure"
-                            }
-                        }
-                    ]
-                }
-            }
-        }
-    ],
-    "privileges": []
+      }
+    }
+  },
+  "supportsMultiVisualSelection": true
 }
