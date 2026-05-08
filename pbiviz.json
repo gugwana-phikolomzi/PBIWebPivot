@@ -1,1 +1,35 @@
-{"visual":{"name":"webPivot","displayName":"WebPivot","guid":"webPivotF7E4E719C10447E094546CE47F1BF34E","visualClassName":"Visual","version":"1.0.0.0","description":"","supportUrl":"","gitHubUrl":""},"apiVersion":"5.3.0","author":{"name":"","email":""},"assets":{"icon":"assets/icon.png"},"externalJS":null,"style":"style/visual.less","capabilities":"capabilities.json","dependencies":null,"stringResources":[],"version":"1.0.0.0"}
+{
+    "visual":{
+        "name":"WebPivot",
+        "displayName":"WebPivot",
+        "guid":"webPivotF7E4E719C10447E094546CE47F1BF34E",
+        "visualClassName":"Visual",
+        "version":"1.0.0.0",
+        "description":"Creates a custom pivot table visual",
+        "supportUrl":"https://example.com/support",
+        "gitHubUrl":"https://github.com/gugwana-phikolomzi/PBIWebPivot"
+    },
+    
+    "apiVersion":"5.3.0",
+    
+    "author":{
+        "name":"P GUGWANA",
+        "email":"ggwphi001@myuct.ac.za"
+    },
+    
+    "assets":{
+        "icon":"assets/icon.png"
+    },
+    
+    "externalJS":null,
+    
+    "style":"style/visual.less",
+    
+    "capabilities":"capabilities.json",
+    
+    "dependencies":null,
+    
+    "stringResources":[],
+    
+    "version":"1.0.0.0"
+}
