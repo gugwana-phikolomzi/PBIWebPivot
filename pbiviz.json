@@ -2,7 +2,7 @@
     "visual":{
         "name":"WebPivot",
         "displayName":"WebPivot",
-        "guid":"webPivotF7E4E719C10447E094546CE47F1BF34E",
+        "guid":"CASwebPivot",
         "visualClassName":"Visual",
         "version":"1.0.0.0",
         "description":"Creates a custom pivot table visual",
