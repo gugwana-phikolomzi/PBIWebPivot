@@ -1,13 +1,18 @@
 "use strict";
 
+import "./styles/index.css";
+import { formatCell, BLANK_TOKEN, isBlank, displayFilterValue } from "./utils/format";
+import { FilterManager } from "./FilterManager";
+
 import powerbi from "powerbi-visuals-api";
 
 import IVisual = powerbi.extensibility.visual.IVisual;
 import VisualConstructorOptions = powerbi.extensibility.visual.VisualConstructorOptions;
 import VisualUpdateOptions = powerbi.extensibility.visual.VisualUpdateOptions;
 
+
 type PbiTableColumn = powerbi.DataViewMetadataColumn;
-type PbiTableRow = powerbi.PrimitiveValue[];
+export type PbiTableRow = powerbi.PrimitiveValue[];
 
 type StatKey =
     | "count" | "min" | "max" | "mean" | "median" | "sum" | "stddev" | "unique"
@@ -115,8 +120,10 @@ export class Visual implements IVisual {
     private selectedFields: Set<number> = new Set();
     private fieldSearch: string = "";
 
-    private filters: Map<number, Set<string>> = new Map();
-    private filterSearch: Map<number, string> = new Map();
+    private filterManager: FilterManager;
+
+    private filters;
+    private filterSearch;
 
     private sortCol: number | null = null;
     private sortDir: SortDir = null;
@@ -151,7 +158,11 @@ export class Visual implements IVisual {
     constructor(options: VisualConstructorOptions) {
         this.target = options.element;
         this.host = options.host;
-        this.injectStyles();
+
+        this.filterManager = new FilterManager();
+
+        this.filters = this.filterManager.getFilters();
+        this.filterSearch = this.filterManager.getSearch();
 
         // END DRAG when mouse released anywhere
         document.addEventListener("mouseup", () => {
@@ -174,510 +185,6 @@ export class Visual implements IVisual {
                 this.copySelectionToClipboard();
             }
         });
-    }
-
-    private injectStyles() {
-        const style = document.createElement("style");
-        style.textContent = `
-            * { box-sizing: border-box; margin: 0; padding: 0; }
-
-            .pbi-root {
-                font-family: Arial, Helvetica, sans-serif;
-                font-size: 12px;
-                display: flex;
-                height: 100%;
-                color: #333;
-                background: #fff;
-                border: 1px solid #c8c8c8;
-                overflow: hidden;
-            }
-
-            .field-panel {
-                width: 200px;
-                min-width: 160px;
-                background: #f5f5f5;
-                border-right: 1px solid #c8c8c8;
-                display: flex;
-                flex-direction: column;
-                overflow: hidden;
-            }
-
-            .panel-title {
-                background: #e8e8e8;
-                border-bottom: 1px solid #c8c8c8;
-                padding: 5px 8px;
-                font-size: 11px;
-                font-weight: bold;
-                color: #444;
-                text-transform: uppercase;
-                letter-spacing: 0.04em;
-                flex-shrink: 0;
-            }
-
-            .field-panel-inner {
-                flex: 1;
-                overflow-y: auto;
-                padding: 6px;
-                display: flex;
-                flex-direction: column;
-                gap: 5px;
-            }
-
-            .field-search {
-                width: 100%;
-                padding: 3px 5px;
-                border: 1px solid #c0c0c0;
-                font-size: 11px;
-                outline: none;
-                background: #fff;
-                color: #333;
-            }
-            .field-search:focus { border-color: #0078d4; }
-
-            .action-row {
-                display: flex;
-                gap: 3px;
-                flex-wrap: wrap;
-            }
-
-            .btn {
-                padding: 2px 8px;
-                border: 1px solid #adadad;
-                background: linear-gradient(to bottom, #f8f8f8, #e8e8e8);
-                font-size: 11px;
-                cursor: pointer;
-                color: #333;
-                font-family: Arial, Helvetica, sans-serif;
-            }
-            .btn:hover { background: linear-gradient(to bottom, #e8f0fc, #cfe0fc); border-color: #7ab4ea; }
-            .btn:active { background: linear-gradient(to bottom, #dde8f8, #c0d4f0); }
-            .btn:disabled { opacity: 0.6; cursor: default; }
-
-            .field-list { display: flex; flex-direction: column; }
-
-            .field-row {
-                display: flex;
-                align-items: center;
-                gap: 5px;
-                padding: 3px 4px;
-                cursor: pointer;
-                border-bottom: 1px solid transparent;
-                user-select: none;
-            }
-            .field-row:hover { background: #ddeeff; }
-            .field-row input[type=checkbox] { cursor: pointer; flex-shrink: 0; }
-            .field-row label { cursor: pointer; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; }
-
-            .stats-toggle-row {
-                display: flex;
-                align-items: center;
-                gap: 6px;
-                padding: 4px 4px 3px;
-                background: #ececec;
-                border-bottom: 1px solid #d0d0d0;
-                flex-shrink: 0;
-            }
-            .stats-toggle-row label { font-weight: bold; color: #333; cursor: pointer; font-size: 11px; }
-            .stats-toggle-row input[type=checkbox] { cursor: pointer; }
-
-            .stat-options {
-                display: flex;
-                flex-direction: column;
-                background: #fafafa;
-                border-bottom: 1px solid #d8d8d8;
-            }
-
-            .stat-group-label {
-                font-size: 10px;
-                font-weight: bold;
-                color: #888;
-                text-transform: uppercase;
-                letter-spacing: 0.05em;
-                padding: 5px 8px 2px;
-                background: #f0f0f0;
-                border-top: 1px solid #e0e0e0;
-                border-bottom: 1px solid #e8e8e8;
-            }
-
-            .stat-option-row {
-                display: flex;
-                align-items: center;
-                gap: 6px;
-                padding: 2px 8px;
-                cursor: pointer;
-                position: relative;
-                border-bottom: 1px solid #f0f0f0;
-            }
-            .stat-option-row:hover { background: #ddeeff; }
-            .stat-option-row input[type=checkbox] { cursor: pointer; }
-            .stat-option-row label { cursor: pointer; font-size: 11px; color: #333; flex: 1; }
-
-            .stat-tooltip {
-                position: fixed;
-                background: #ffffcc;
-                color: #333;
-                border: 1px solid #aaa;
-                font-size: 10px;
-                padding: 3px 6px;
-                white-space: nowrap;
-                pointer-events: none;
-                opacity: 0;
-                transition: opacity 0.1s;
-                z-index: 9999;
-                box-shadow: 1px 1px 3px rgba(0,0,0,0.2);
-            }
-
-            .table-panel {
-                flex: 1;
-                overflow: auto;
-                display: flex;
-                flex-direction: column;
-                background: #fff;
-            }
-
-            .stats-section {
-                border-bottom: 2px solid #c8c8c8;
-                flex-shrink: 0;
-                overflow-x: auto;
-            }
-
-            .stats-section-title {
-                background: #d8e4f0;
-                border-bottom: 1px solid #b0c8e0;
-                padding: 3px 8px;
-                font-size: 11px;
-                font-weight: bold;
-                color: #1a5276;
-                text-transform: uppercase;
-                letter-spacing: 0.04em;
-                display: flex;
-                align-items: center;
-                gap: 6px;
-            }
-
-            .stats-filtered-badge {
-                display: inline-flex;
-                align-items: center;
-                background: #0078d4;
-                color: #fff;
-                font-size: 9px;
-                font-weight: bold;
-                padding: 1px 6px;
-                border-radius: 8px;
-                letter-spacing: 0.03em;
-                text-transform: uppercase;
-            }
-
-            .stats-table {
-                border-collapse: collapse;
-                width: auto;
-                font-size: 11px;
-            }
-
-            .stats-table th {
-                background: #e8eef5;
-                border: 1px solid #c0ccd8;
-                padding: 4px 8px;
-                text-align: left;
-                font-weight: bold;
-                color: #2c3e50;
-                white-space: nowrap;
-                font-size: 11px;
-            }
-
-            .stats-table th.stat-col {
-                background: #dce6f1;
-                text-align: left;
-                min-width: 80px;
-                color: #1a3a5c;
-            }
-
-            .stats-table td {
-                border: 1px solid #d8d8d8;
-                padding: 3px 8px;
-                white-space: nowrap;
-            }
-
-            .stats-table td.field-name-cell {
-                background: #f5f5f5;
-                font-weight: bold;
-                color: #333;
-                border-right: 2px solid #b8b8b8;
-            }
-
-            .stats-table td.stat-val-cell {
-                text-align: right;
-                font-variant-numeric: tabular-nums;
-                color: #1a3a5c;
-                background: #fff;
-            }
-
-            .stats-table tr:nth-child(even) td { background: #f7fbff; }
-            .stats-table tr:nth-child(even) td.field-name-cell { background: #ededef; }
-            .stats-table tr:hover td { background: #ddeeff !important; }
-
-            .data-table td {
-                cursor: default;
-            }
-
-            .data-table td {
-                user-select: none;
-            }
-
-            .data-table-wrap {
-                flex: 1;
-                overflow: auto;
-            }
-
-            .data-table {
-                border-collapse: collapse;
-                font-size: 12px;
-                width: auto;
-            }
-
-            .data-table thead tr {
-                position: sticky;
-                top: 0;
-                z-index: 2;
-            }
-
-            .data-table th {
-                background: linear-gradient(to bottom, #f0f0f0, #dcdcdc);
-                border: 1px solid #b8b8b8;
-                padding: 4px 8px;
-                text-align: left;
-                font-weight: bold;
-                color: #222;
-                white-space: nowrap;
-                font-size: 11px;
-                vertical-align: top;
-            }
-
-            .data-table td.copied {
-                background: #b3d4ff !important;
-                outline: 2px solid #0078d4;
-                outline-offset: -2px;
-            }
-
-            .data-table td {
-                border: 1px solid #e0e0e0;
-                padding: 2px 8px;
-                color: #333;
-                white-space: nowrap;
-            }
-
-            .data-table tr:nth-child(even) td { background: #f5f9ff; }
-            .data-table tr:hover td { background: #ddeeff; }
-
-            .col-header-title-row {
-                display: flex;
-                align-items: center;
-                gap: 4px;
-                cursor: pointer;
-                user-select: none;
-                padding: 1px 0;
-            }
-            .col-header-title-row:hover .sort-btn { opacity: 1; }
-
-            .col-header-name {
-                flex: 1;
-                overflow: hidden;
-                text-overflow: ellipsis;
-            }
-
-            .sort-btn {
-                display: inline-flex;
-                flex-direction: column;
-                align-items: center;
-                justify-content: center;
-                gap: 0px;
-                flex-shrink: 0;
-                opacity: 0.35;
-                transition: opacity 0.15s;
-                line-height: 1;
-            }
-            .sort-btn.active { opacity: 1; }
-
-            .sort-arrow {
-                font-size: 8px;
-                line-height: 1;
-                color: #444;
-            }
-            .sort-arrow.active-arrow {
-                color: #0078d4;
-                font-weight: bold;
-            }
-
-            .col-filter-wrap {
-                position: relative;
-                margin-top: 3px;
-                min-width: 100px;
-                max-width: 220px;
-            }
-
-            .col-filter-btn {
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                gap: 3px;
-                width: 100%;
-                padding: 2px 5px;
-                border: 1px solid #b0b0b0;
-                background: #fff;
-                font-size: 10px;
-                color: #333;
-                cursor: pointer;
-                font-family: Arial, Helvetica, sans-serif;
-                white-space: nowrap;
-                overflow: hidden;
-                text-overflow: ellipsis;
-                text-align: left;
-                outline: none;
-            }
-            .col-filter-btn:focus,
-            .col-filter-btn.open { border-color: #0078d4; background: #e8f0fc; }
-            .col-filter-btn .filter-arrow { flex-shrink: 0; font-size: 8px; color: #666; }
-            .col-filter-btn .filter-label { overflow: hidden; text-overflow: ellipsis; flex: 1; }
-            .col-filter-btn.has-filter { border-color: #0078d4; background: #ddeeff; font-weight: bold; }
-
-            .col-filter-dropdown {
-                position: absolute;
-                top: 100%;
-                left: 0;
-                z-index: 100;
-                background: #fff;
-                border: 1px solid #0078d4;
-                box-shadow: 2px 3px 8px rgba(0,0,0,0.18);
-                min-width: 160px;
-                max-width: 260px;
-                max-height: 220px;
-                display: flex;
-                flex-direction: column;
-                overflow: hidden;
-            }
-
-            .col-filter-search {
-                border: none;
-                border-bottom: 1px solid #d0d0d0;
-                padding: 4px 6px;
-                font-size: 11px;
-                outline: none;
-                font-family: Arial, Helvetica, sans-serif;
-                color: #333;
-                flex-shrink: 0;
-            }
-            .col-filter-search:focus { border-bottom-color: #0078d4; }
-
-            .col-filter-actions {
-                display: flex;
-                gap: 2px;
-                padding: 3px 5px;
-                border-bottom: 1px solid #e8e8e8;
-                flex-shrink: 0;
-            }
-            .col-filter-actions .btn { padding: 1px 6px; font-size: 10px; }
-
-            .col-filter-list {
-                overflow-y: auto;
-                flex: 1;
-            }
-
-            .col-filter-item {
-                display: flex;
-                align-items: center;
-                gap: 5px;
-                padding: 2px 6px;
-                cursor: pointer;
-                user-select: none;
-                border-bottom: 1px solid #f5f5f5;
-                font-size: 11px;
-                white-space: nowrap;
-                overflow: hidden;
-                text-overflow: ellipsis;
-            }
-            .col-filter-item:hover { background: #ddeeff; }
-            .col-filter-item input[type=checkbox] { cursor: pointer; flex-shrink: 0; }
-            .col-filter-item label {
-                cursor: pointer;
-                overflow: hidden;
-                text-overflow: ellipsis;
-                color: #333;
-            }
-
-            .col-filter-empty {
-                padding: 6px 8px;
-                color: #aaa;
-                font-size: 11px;
-                font-style: italic;
-            }
-
-            .empty-msg {
-                color: #888;
-                font-size: 12px;
-                padding: 16px;
-                font-style: italic;
-            }
-
-            .row-count-bar {
-                background: #f0f0f0;
-                border-top: 1px solid #c8c8c8;
-                padding: 4px 8px;
-                font-size: 10px;
-                color: #666;
-                flex-shrink: 0;
-                display: flex;
-                align-items: center;
-                gap: 8px;
-                flex-wrap: wrap;
-            }
-
-            .truncate-note {
-                padding: 4px 6px;
-                font-size: 10px;
-                color: #777;
-                border-bottom: 1px solid #e8e8e8;
-                background: #fafafa;
-            }
-
-            .load-more-status {
-                color: #1a5276;
-                font-size: 10px;
-                font-weight: bold;
-            }
-
-            .copyable {
-                cursor: pointer;
-                position: relative;
-            }
-
-            .copyable:hover {
-                background: #e8f3ff !important;
-            }
-
-            .copy-toast {
-                position: fixed;
-                bottom: 18px;
-                right: 18px;
-                background: #323232;
-                color: #fff;
-                padding: 6px 12px;
-                font-size: 11px;
-                border-radius: 4px;
-                opacity: 0;
-                transform: translateY(8px);
-                transition: opacity 0.18s ease, transform 0.18s ease;
-                pointer-events: none;
-                z-index: 99999;
-            }
-
-            .copy-toast.show {
-                opacity: 1;
-                transform: translateY(0);
-            }
-
-
-        `;
-        this.target.appendChild(style);
     }
 
     public update(options: VisualUpdateOptions) {
@@ -762,8 +269,7 @@ export class Visual implements IVisual {
         btnClear.innerText = "Clear";
         btnClear.onclick = () => {
             this.selectedFields.clear();
-            this.filters.clear();
-            this.filterSearch.clear();
+            this.filterManager.clearAll();
             this.sortCol = null;
             this.sortDir = null;
             this.invalidateCaches();
@@ -775,8 +281,7 @@ export class Visual implements IVisual {
         btnResetFilters.className = "btn";
         btnResetFilters.innerText = "Reset Filters";
         btnResetFilters.onclick = () => {
-            this.filters.clear();
-            this.filterSearch.clear();
+            this.filterManager.clearAll();
             this.invalidateCaches();
             this.renderMainContent(tablePanel);
         };
@@ -901,19 +406,6 @@ export class Visual implements IVisual {
         this.groupedRowsCacheKey = "";
     }
 
-    private getFilterCacheKey(): string {
-        const parts: string[] = [];
-
-        Array.from(this.filters.entries())
-            .sort((a, b) => a[0] - b[0])
-            .forEach(([colIndex, values]) => {
-                const sortedVals = Array.from(values).sort();
-                parts.push(`${colIndex}:${sortedVals.join("~~")}`);
-            });
-
-        return parts.join("|");
-    }
-
     private getGroupCacheKey(selected: number[], filterKey: string): string {
         return `${filterKey}__${selected.join(",")}__${this.sortCol ?? "null"}__${this.sortDir ?? "null"}`;
     }
@@ -927,7 +419,7 @@ export class Visual implements IVisual {
     }
 
     private buildProfile(rows: PbiTableRow[], index: number): ColumnProfile {
-        const allValues: (string | null)[] = [];
+        const allValues: string[] = [];
         const numericValues: number[] = [];
         let nullCount = 0;
         let zeroCount = 0;
@@ -935,23 +427,43 @@ export class Visual implements IVisual {
 
         rows.forEach(row => {
             const raw = row[index];
-            if (raw === null || raw === undefined || raw === "") {
+            // if (raw === null || raw === undefined || raw === "") {
+            //     nullCount++;
+            //     allValues.push(null);
+            // }
+            if (isBlank(raw)) {
                 nullCount++;
-                allValues.push(null);
-            } else {
-                const v = this.formatCell(raw);
-                allValues.push(v);
-                const n = parseFloat(v);
-                if (!isNaN(n)) {
-                    numericValues.push(n);
-                    if (n === 0) zeroCount++;
-                    if (n < 0) negativeCount++;
-                }
+                allValues.push(BLANK_TOKEN);
+                return;
+            } 
+
+            const v = formatCell(raw);
+            allValues.push(v);
+
+            const n = parseFloat(v);
+            if (!isNaN(n)) {
+                numericValues.push(n);
+                if (n === 0) zeroCount++;
+                if (n < 0) negativeCount++;
             }
+            // else {
+                
+            //     const v = formatCell(raw);
+            //     allValues.push(v);
+            //     const n = parseFloat(v);
+            //     if (!isNaN(n)) {
+            //         numericValues.push(n);
+            //         if (n === 0) zeroCount++;
+            //         if (n < 0) negativeCount++;
+            //     }
+            // }
         });
 
-        const nonNullStrings = allValues.filter((v): v is string => v !== null);
-        const unique = Array.from(new Set(nonNullStrings));
+        const unique = Array.from(new Set(allValues));
+        const nonNullStrings = unique.filter(v => v !== BLANK_TOKEN);
+
+        // const nonNullStrings = allValues.filter((v): v is string => v !== null);
+        // const unique = Array.from(new Set(nonNullStrings));
         const totalRows = rows.length;
         const isNumeric = totalRows > 0 && (numericValues.length / totalRows) > 0.8;
 
@@ -1050,8 +562,14 @@ export class Visual implements IVisual {
         return sorted[lower] + frac * (sorted[upper] - sorted[lower]);
     }
 
+    private clearElement(element: HTMLElement) {
+        while (element.firstChild) {
+            element.removeChild(element.firstChild);
+        }
+    }
+
     private renderFieldList(container: HTMLElement, tablePanel: HTMLElement) {
-        container.innerHTML = "";
+        this.clearElement(container);
         const search = this.fieldSearch.toLowerCase();
 
         this.columns.forEach((col, index) => {
@@ -1111,7 +629,7 @@ export class Visual implements IVisual {
 
         const filterLabel = document.createElement("span");
         filterLabel.className = "filter-label";
-        filterLabel.innerText = this.filterButtonLabel(activeFilter, allValues.length);
+        filterLabel.innerText = this.filterManager.getButtonLabel(activeFilter, allValues.length);
 
         const arrow = document.createElement("span");
         arrow.className = "filter-arrow";
@@ -1178,7 +696,7 @@ export class Visual implements IVisual {
             dropdown.appendChild(list);
 
             const renderList = (searchTerm: string) => {
-                list.innerHTML = "";
+                this.clearElement(list);
                 const term = searchTerm.toLowerCase();
                 const visible = term
                     ? allValues.filter(v => v.toLowerCase().includes(term))
@@ -1203,8 +721,8 @@ export class Visual implements IVisual {
                     cb.checked = !current || current.has(v);
 
                     const lbl = document.createElement("label");
-                    lbl.innerText = v || "(blank)";
-                    lbl.title = v;
+                    lbl.innerText = displayFilterValue(v);
+                    lbl.title = displayFilterValue(v);
 
                     cb.onchange = () => {
                         let sel = this.filters.get(colIndex);
@@ -1223,7 +741,7 @@ export class Visual implements IVisual {
                         this.invalidateCaches();
 
                         const newActive = this.filters.get(colIndex) ?? new Set();
-                        filterLabel.innerText = this.filterButtonLabel(newActive, allValues.length);
+                        filterLabel.innerText = this.filterManager.getButtonLabel(newActive, allValues.length);
                         btn.className = "col-filter-btn" + (newActive.size > 0 ? " has-filter open" : " open");
                         this.renderMainContent(tableContainer);
                     };
@@ -1267,7 +785,7 @@ export class Visual implements IVisual {
             }
             btn.classList.remove("open");
             const cur = this.filters.get(colIndex) ?? new Set();
-            filterLabel.innerText = this.filterButtonLabel(cur, allValues.length);
+            filterLabel.innerText = this.filterManager.getButtonLabel(cur, allValues.length);
             btn.className = "col-filter-btn" + (cur.size > 0 ? " has-filter" : "");
         };
 
@@ -1280,39 +798,8 @@ export class Visual implements IVisual {
         return wrap;
     }
 
-    private filterButtonLabel(selected: Set<string>, total: number): string {
-        if (selected.size === 0) return "(All)";
-        if (selected.size === 1) return `= ${[...selected][0] || "(blank)"}`;
-        if (selected.size === total) return "(All)";
-        return `${selected.size} of ${total} selected`;
-    }
-
-    private getFilteredRows(): PbiTableRow[] {
-        const key = this.getFilterCacheKey();
-
-        if (this.filteredRowsCache && this.filteredRowsCacheKey === key) {
-            return this.filteredRowsCache;
-        }
-
-        const result =
-            this.filters.size === 0
-                ? this.rows
-                : this.rows.filter(row => {
-                    for (const [colIndex, selectedValues] of this.filters.entries()) {
-                        if (selectedValues.size === 0) return false;
-                        const cellVal = this.formatCell(row[colIndex]);
-                        if (!selectedValues.has(cellVal)) return false;
-                    }
-                    return true;
-                });
-
-        this.filteredRowsCache = result;
-        this.filteredRowsCacheKey = key;
-        return result;
-    }
-
     private getGroupedRows(filteredRows: PbiTableRow[], selected: number[]): PbiTableRow[] {
-        const filterKey = this.getFilterCacheKey();
+        const filterKey = this.filterManager.getCacheKey();
         const groupKey = this.getGroupCacheKey(selected, filterKey);
 
         if (this.groupedRowsCache && this.groupedRowsCacheKey === groupKey) {
@@ -1322,7 +809,7 @@ export class Visual implements IVisual {
         const groupedMap = new Map<string, PbiTableRow>();
 
         for (const row of filteredRows) {
-            const key = selected.map(i => this.formatCell(row[i])).join("||");
+            const key = selected.map(i => formatCell(row[i])).join("||");
             if (!groupedMap.has(key)) groupedMap.set(key, row);
         }
 
@@ -1335,8 +822,8 @@ export class Visual implements IVisual {
             const isNumeric = profile?.type === "numeric";
 
             result = result.sort((a, b) => {
-                const aRaw = this.formatCell(a[sortColIndex]);
-                const bRaw = this.formatCell(b[sortColIndex]);
+                const aRaw = formatCell(a[sortColIndex]);
+                const bRaw = formatCell(b[sortColIndex]);
 
                 let cmp: number;
                 if (isNumeric) {
@@ -1363,9 +850,9 @@ export class Visual implements IVisual {
     }
 
     private renderMainContent(container: HTMLElement) {
-        container.innerHTML = "";
+        this.clearElement(container);
 
-        const filteredRows = this.getFilteredRows();
+        const filteredRows = this.filterManager.getFilteredRows(this.rows);
         const isFiltered = this.filters.size > 0;
 
         if (this.showSummaryStats && this.selectedStats.size > 0) {
@@ -1703,7 +1190,7 @@ export class Visual implements IVisual {
                 const cellKey = `${rowIndex}_${visibleColIndex}`;
                 td.dataset.cell = cellKey;
 
-                const value = this.formatCell(row[colIndex]);
+                const value = formatCell(row[colIndex]);
                 td.innerText = value;
 
                 // 🟦 START selection
@@ -1766,9 +1253,4 @@ export class Visual implements IVisual {
         container.appendChild(bar);
     }
 
-    private formatCell(v: powerbi.PrimitiveValue): string {
-        if (v === null || v === undefined) return "";
-        if (v instanceof Date) return v.toISOString();
-        return String(v);
-    }
 }
