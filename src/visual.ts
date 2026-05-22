@@ -146,6 +146,9 @@ export class Visual implements IVisual {
     private hasMoreData: boolean = false;
     private isLoadingMore: boolean = false;
 
+    private openDropdown: HTMLElement | null = null;
+    private openDropdownCloseFn: (() => void) | null = null;
+
     // --- COPY / SELECTION STATE ---
     private selectedCells: Set<string> = new Set(); // "row_col"
     private selectionAnchor: { r: number, c: number } | null = null;
@@ -427,10 +430,7 @@ export class Visual implements IVisual {
 
         rows.forEach(row => {
             const raw = row[index];
-            // if (raw === null || raw === undefined || raw === "") {
-            //     nullCount++;
-            //     allValues.push(null);
-            // }
+
             if (isBlank(raw)) {
                 nullCount++;
                 allValues.push(BLANK_TOKEN);
@@ -446,24 +446,11 @@ export class Visual implements IVisual {
                 if (n === 0) zeroCount++;
                 if (n < 0) negativeCount++;
             }
-            // else {
-                
-            //     const v = formatCell(raw);
-            //     allValues.push(v);
-            //     const n = parseFloat(v);
-            //     if (!isNaN(n)) {
-            //         numericValues.push(n);
-            //         if (n === 0) zeroCount++;
-            //         if (n < 0) negativeCount++;
-            //     }
-            // }
         });
 
         const unique = Array.from(new Set(allValues));
         const nonNullStrings = unique.filter(v => v !== BLANK_TOKEN);
 
-        // const nonNullStrings = allValues.filter((v): v is string => v !== null);
-        // const unique = Array.from(new Set(nonNullStrings));
         const totalRows = rows.length;
         const isNumeric = totalRows > 0 && (numericValues.length / totalRows) > 0.8;
 
@@ -618,7 +605,25 @@ export class Visual implements IVisual {
     private buildMultiSelectFilter(colIndex: number, tableContainer: HTMLElement): HTMLElement {
         const profile = this.columnProfiles.get(colIndex);
         const rawValues: string[] = profile?.uniqueValues ?? [];
-        const allValues: string[] = rawValues.slice(0, this.MAX_DISTINCT_FILTER_VALUES);
+
+        const sortedValues = [...rawValues].sort((a, b) => {
+            // Put blanks first
+            if (a === BLANK_TOKEN) return -1;
+            if (b === BLANK_TOKEN) return 1;
+
+            // Normal alphabetical sort
+            return a.localeCompare(b);
+        });
+
+        const allValues: string[] = sortedValues.slice(0, this.MAX_DISTINCT_FILTER_VALUES);
+
+        // console.log("Filter values for column", colIndex, allValues);
+        console.table({
+            rawValues,
+            sortedValues,
+            allValues
+        });
+
         const activeFilter: Set<string> = this.filters.get(colIndex) ?? new Set();
 
         const wrap = document.createElement("div");
@@ -643,10 +648,17 @@ export class Visual implements IVisual {
         let outsideClickHandler: ((e: MouseEvent) => void) | null = null;
 
         const openDropdown = () => {
-            if (dropdown) return;
+            // close any existing open dropdown first
+            if (this.openDropdownCloseFn) {
+                this.openDropdownCloseFn();
+            }
 
             dropdown = document.createElement("div");
             dropdown.className = "col-filter-dropdown";
+
+
+            this.openDropdown = dropdown;
+            this.openDropdownCloseFn = closeDropdown;
 
             const searchInput = document.createElement("input");
             searchInput.type = "text";
@@ -775,6 +787,12 @@ export class Visual implements IVisual {
         };
 
         const closeDropdown = () => {
+            
+            if (this.openDropdown === dropdown) {
+                this.openDropdown = null;
+                this.openDropdownCloseFn = null;
+            }
+
             if (dropdown) {
                 dropdown.remove();
                 dropdown = null;
