@@ -154,7 +154,7 @@ export class Visual implements IVisual {
     private selectionAnchor: { r: number, c: number } | null = null;
     private isDraggingSelection: boolean = false;
 
-    private readonly MAX_RENDER_ROWS = 2000;
+    private readonly MAX_RENDER_ROWS = 20000;
     private readonly MAX_STATS_ROWS = 10000;
     private readonly MAX_DISTINCT_FILTER_VALUES = 1000;
 
