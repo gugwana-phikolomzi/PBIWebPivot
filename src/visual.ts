@@ -156,7 +156,7 @@ export class Visual implements IVisual {
 
     private readonly MAX_RENDER_ROWS = 20000;
     private readonly MAX_STATS_ROWS = 10000;
-    private readonly MAX_DISTINCT_FILTER_VALUES = 1000;
+    private readonly MAX_DISTINCT_FILTER_VALUES = 10000;
 
     constructor(options: VisualConstructorOptions) {
         this.target = options.element;
