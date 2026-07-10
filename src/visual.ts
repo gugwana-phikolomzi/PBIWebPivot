@@ -226,7 +226,50 @@ export class Visual implements IVisual {
         });
 
         if (this.selectedFields.size === 0 && this.columns.length > 0) {
-            this.selectedFields.add(0);
+            const persisted = dataView.metadata?.objects?.["persistedState"];
+            let restored = false;
+
+            if (persisted?.selectedFieldNames) {
+                try {
+                    const names: string[] = JSON.parse(persisted.selectedFieldNames as string);
+                    names.forEach(name => {
+                        const idx = this.columns.findIndex(c => c.queryName === name);
+                        if (idx !== -1) this.selectedFields.add(idx);
+                    });
+                    restored = this.selectedFields.size > 0;
+                } catch { /* malformed/old data, ignore */ }
+            }
+
+            if (restored) {
+                // also restore sort / stats / filters
+                const sortName = persisted?.sortColName as string;
+                if (sortName) {
+                    const idx = this.columns.findIndex(c => c.queryName === sortName);
+                    if (idx !== -1) {
+                        this.sortCol = idx;
+                        this.sortDir = (persisted?.sortDir as SortDir) || null;
+                    }
+                }
+                this.showSummaryStats = !!persisted?.showSummaryStats;
+                if (persisted?.selectedStats) {
+                    try {
+                        const stats: StatKey[] = JSON.parse(persisted.selectedStats as string);
+                        this.selectedStats = new Set(stats);
+                    } catch { /* ignore */ }
+                }
+                if (persisted?.filterState) {
+                    try {
+                        const filterObj: Record<string, string[]> = JSON.parse(persisted.filterState as string);
+                        Object.entries(filterObj).forEach(([name, values]) => {
+                            const idx = this.columns.findIndex(c => c.queryName === name);
+                            if (idx !== -1) this.filters.set(idx, new Set(values));
+                        });
+                    } catch { /* ignore */ }
+                }
+            } else {
+                // true first-ever load, nothing persisted yet — sensible default
+                this.selectedFields.add(0);
+            }
         }
 
         const root = document.createElement("div");
@@ -265,6 +308,7 @@ export class Visual implements IVisual {
             this.invalidateCaches();
             this.renderFieldList(fieldListContainer, tablePanel);
             this.renderMainContent(tablePanel);
+            this.persistState();
         };
 
         const btnClear = document.createElement("button");
@@ -278,6 +322,7 @@ export class Visual implements IVisual {
             this.invalidateCaches();
             this.renderFieldList(fieldListContainer, tablePanel);
             this.renderMainContent(tablePanel);
+            this.persistState();
         };
 
         const btnResetFilters = document.createElement("button");
@@ -287,6 +332,7 @@ export class Visual implements IVisual {
             this.filterManager.clearAll();
             this.invalidateCaches();
             this.renderMainContent(tablePanel);
+            this.persistState();
         };
 
         actionsRow.appendChild(btnAll);
@@ -316,6 +362,7 @@ export class Visual implements IVisual {
             this.showSummaryStats = statsCheckbox.checked;
             statOptionsContainer.style.display = this.showSummaryStats ? "flex" : "none";
             this.renderMainContent(tablePanel);
+            this.persistState();
         };
 
         statsToggleRow.appendChild(statsCheckbox);
@@ -555,6 +602,35 @@ export class Visual implements IVisual {
         }
     }
 
+    private persistState(): void {
+        const selectedNames = Array.from(this.selectedFields)
+            .map(i => this.columns[i]?.queryName)
+            .filter((n): n is string => !!n);
+
+        const filterObj: Record<string, string[]> = {};
+        this.filters.forEach((valueSet, colIndex) => {
+            const qn = this.columns[colIndex]?.queryName;
+            if (qn) filterObj[qn] = Array.from(valueSet);
+        });
+
+        const sortColName = this.sortCol !== null ? this.columns[this.sortCol]?.queryName ?? "" : "";
+
+        this.host.persistProperties({
+            merge: [{
+                objectName: "persistedState",
+                selector: null as unknown as powerbi.visuals.ISelectionId,
+                properties: {
+                    selectedFieldNames: JSON.stringify(selectedNames),
+                    sortColName: sortColName,
+                    sortDir: this.sortDir ?? "",
+                    showSummaryStats: this.showSummaryStats,
+                    selectedStats: JSON.stringify(Array.from(this.selectedStats)),
+                    filterState: JSON.stringify(filterObj),
+                }
+            }]
+        });
+    }
+
     private renderFieldList(container: HTMLElement, tablePanel: HTMLElement) {
         this.clearElement(container);
         const search = this.fieldSearch.toLowerCase();
@@ -581,6 +657,7 @@ export class Visual implements IVisual {
                     }
                 }
                 this.invalidateCaches();
+                this.persistState(); 
                 this.renderMainContent(tablePanel);
             };
 
@@ -687,6 +764,7 @@ export class Visual implements IVisual {
                 this.invalidateCaches();
                 closeDropdown();
                 this.renderMainContent(tableContainer);
+                this.persistState(); 
             };
 
             const btnClearSel = document.createElement("button");
@@ -697,6 +775,7 @@ export class Visual implements IVisual {
                 this.filters.set(colIndex, new Set());
                 this.invalidateCaches();
                 renderList("");
+                this.persistState(); 
             };
 
             actionsBar.appendChild(btnSelectAll);
@@ -751,6 +830,7 @@ export class Visual implements IVisual {
                         }
 
                         this.invalidateCaches();
+                        this.persistState(); 
 
                         const newActive = this.filters.get(colIndex) ?? new Set();
                         filterLabel.innerText = this.filterManager.getButtonLabel(newActive, allValues.length);
@@ -765,6 +845,7 @@ export class Visual implements IVisual {
                             cb.checked = !cb.checked;
                             cb.onchange!(new Event("change"));
                         }
+                        this.persistState(); 
                     };
                     list.appendChild(item);
                 });
@@ -1184,6 +1265,7 @@ export class Visual implements IVisual {
                 }
                 this.invalidateCaches();
                 this.renderMainContent(container);
+                this.persistState();
             };
 
             const filterWidget = this.buildMultiSelectFilter(colIndex, container);

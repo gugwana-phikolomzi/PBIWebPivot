@@ -40,6 +40,16 @@
           }
         }
       }
+    },
+    "persistedState": {
+      "properties": {
+        "selectedFieldNames": { "type": { "text": true } },
+        "sortColName":        { "type": { "text": true } },
+        "sortDir":            { "type": { "text": true } },
+        "showSummaryStats":   { "type": { "bool": true } },
+        "selectedStats":      { "type": { "text": true } },
+        "filterState":        { "type": { "text": true } }
+      }
     }
   },
   "supportsMultiVisualSelection": true
